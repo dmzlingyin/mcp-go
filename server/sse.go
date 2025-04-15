@@ -24,6 +24,7 @@ type sseSession struct {
 	eventQueue          chan string // Channel for queuing events
 	sessionID           string
 	notificationChannel chan mcp.JSONRPCNotification
+	apiKey              string
 	initialized         atomic.Bool
 }
 
@@ -53,15 +54,15 @@ var _ ClientSession = (*sseSession)(nil)
 // SSEServer implements a Server-Sent Events (SSE) based MCP server.
 // It provides real-time communication capabilities over HTTP using the SSE protocol.
 type SSEServer struct {
-	server          *MCPServer
-	baseURL         string
-	basePath        string
-  useFullURLForMessageEndpoint bool
-	messageEndpoint string
-	sseEndpoint     string
-	sessions        sync.Map
-	srv             *http.Server
-	contextFunc     SSEContextFunc
+	server                       *MCPServer
+	baseURL                      string
+	basePath                     string
+	useFullURLForMessageEndpoint bool
+	messageEndpoint              string
+	sseEndpoint                  string
+	sessions                     sync.Map
+	srv                          *http.Server
+	contextFunc                  SSEContextFunc
 
 	keepAlive         bool
 	keepAliveInterval time.Duration
@@ -158,12 +159,12 @@ func WithSSEContextFunc(fn SSEContextFunc) SSEOption {
 // NewSSEServer creates a new SSE server instance with the given MCP server and options.
 func NewSSEServer(server *MCPServer, opts ...SSEOption) *SSEServer {
 	s := &SSEServer{
-		server:            server,
-		sseEndpoint:       "/sse",
-		messageEndpoint:   "/message",
-    useFullURLForMessageEndpoint: true,
-		keepAlive:         false,
-		keepAliveInterval: 10 * time.Second,
+		server:                       server,
+		sseEndpoint:                  "/sse",
+		messageEndpoint:              "/message",
+		useFullURLForMessageEndpoint: true,
+		keepAlive:                    false,
+		keepAliveInterval:            10 * time.Second,
 	}
 
 	// Apply all options
@@ -241,6 +242,7 @@ func (s *SSEServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 		eventQueue:          make(chan string, 100), // Buffer for events
 		sessionID:           sessionID,
 		notificationChannel: make(chan mcp.JSONRPCNotification, 100),
+		apiKey:              r.URL.Query().Get("api-key"),
 	}
 
 	s.sessions.Store(sessionID, session)
@@ -293,7 +295,6 @@ func (s *SSEServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 		}()
 	}
 
-
 	// Send the initial endpoint event
 	fmt.Fprintf(w, "event: endpoint\ndata: %s\r\n\r\n", s.GetMessageEndpointForClient(sessionID))
 	flusher.Flush()
@@ -345,6 +346,8 @@ func (s *SSEServer) handleMessage(w http.ResponseWriter, r *http.Request) {
 
 	// Set the client context before handling the message
 	ctx := s.server.WithContext(r.Context(), session)
+	// Set api-key
+	ctx = context.WithValue(ctx, "api-key", session.apiKey)
 	if s.contextFunc != nil {
 		ctx = s.contextFunc(ctx, r)
 	}
