@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/dmzlingyin/mcp-go/mcp"
 )
 
 // MCPClient represents an MCP client interface
